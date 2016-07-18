@@ -1,9 +1,9 @@
 # encoding: utf-8
 
 from flask import Flask, render_template
-from flask_googlemaps import GoogleMaps
-from flask_googlemaps import Map
-from secrets import bearer, endpoint, qfile
+#from flask_googlemaps import GoogleMaps
+#from flask_googlemaps import Map
+from secrets import bearer, endpoint, qfile, GOOGLEMAPS_KEY
 from queue import Queue
 import os
 import re
@@ -39,7 +39,6 @@ API_URL = 'https://pgorelease.nianticlabs.com/plfe/rpc'
 LOGIN_URL = 'https://sso.pokemon.com/sso/login?service=https%3A%2F%2Fsso.pokemon.com%2Fsso%2Foauth2.0%2FcallbackAuthorize'
 LOGIN_OAUTH = 'https://sso.pokemon.com/sso/oauth2.0/accessToken'
 PTC_CLIENT_SECRET = 'w8ScCUXJQc6kXKw8FiOhd8Fixzht18Dq3PEVkUCP5ZPxtgyWsbTvWHFLm2wNY0JR'
-GOOGLEMAPS_KEY = "AIzaSyAZzeHhs-8JZ7i18MjFuM35dJHq70n3Hx4"
 
 SESSION = requests.session()
 SESSION.headers.update({'User-Agent': 'Niantic App'})
@@ -61,6 +60,7 @@ pokemons = []
 gyms = []
 pokestops = []
 numbertoteam = {0: "Gym", 1: "Mystic", 2: "Valor", 3: "Instinct"} # At least I'm pretty sure that's it. I could be wrong and then I'd be displaying the wrong owner team of gyms.
+prevreq = []
 og_args = None
 
 
@@ -132,10 +132,13 @@ def retrying_set_location(location_name):
 def set_location(location_name):
     geolocator = GoogleV3()
     loc = geolocator.geocode(location_name)
-    print('[!] Your given location: {}'.format(loc.address.encode('utf-8')))
-    print('[!] lat/long/alt: {} {} {}'.format(loc.latitude, loc.longitude, loc.altitude))
+    #print('[!] Your given location: {}'.format(loc.address.encode('utf-8')))
+    #print('[!] lat/long/alt: {} {} {}'.format(loc.latitude, loc.longitude, loc.altitude))
     global deflat
     global deflng
+    if loc == None:
+        print ("Their location sucked")
+        return
     deflat, deflng = loc.latitude, loc.longitude
     set_location_coords(loc.latitude, loc.longitude, loc.altitude)
 
@@ -193,7 +196,11 @@ def api_req(api_endpoint, access_token, *args, **kwargs):
     r = SESSION.post(api_endpoint, data=protobuf, verify=False)
 
     p_ret = pokemon_pb2.ResponseEnvelop()
-    p_ret.ParseFromString(r.content)
+    try:
+        p_ret.ParseFromString(r.content)
+    except:
+        print("Everything sucks")
+        return p_ret
 
     if VERBOSE_DEBUG:
         print("REQUEST:")
@@ -336,10 +343,6 @@ def get_token(name, passw):
         return global_token
 
 def get_location(default_location):
-    if og_args.debug:
-        global DEBUG
-        DEBUG = True
-        print('[!] DEBUG mode on')
 
     retrying_set_location(default_location)
 
@@ -485,9 +488,6 @@ def get_location(default_location):
         for chunk in chunks:
             dumpToMap(chunk)
         #register_background_thread()
-        t = threading.Thread(target=working)
-        t.daemon = True
-        t.start()
 
 
 def main():
@@ -508,7 +508,11 @@ def main():
     parser.set_defaults(DEBUG=True)
     og_args = parser.parse_args()
     default_location = og_args.location
-    get_location(default_location)
+    if og_args.debug:
+        global DEBUG
+        DEBUG = True
+        print('[!] DEBUG mode on')
+    #get_location(default_location)
 
 q = Queue()
 def working():
@@ -552,7 +556,7 @@ def register_background_thread(initial_registration=False):
 def create_app():
     app = Flask(__name__, template_folder="templates")
 
-    GoogleMaps(app, key=GOOGLEMAPS_KEY)
+    #GoogleMaps(app, key=GOOGLEMAPS_KEY)
     return app
 
 app = create_app()
@@ -571,12 +575,22 @@ def dumpToMap(data):
 
 def updateQueueFile():
     size = q.qsize()
+    print("updating queue with %s"% size)
     f = open(qfile, "w")
     f.write("%s" % size)
     f.close()
 
 @app.route('/addToQueue/<lat>/<lon>')
 def addToQueue(lat,lon):
+    global prevreq
+    if (lat,lon) in prevreq:
+        print("They suck")
+        return "You suck"
+    if abs(float(lon)) > 180:
+        return "Too big!"
+    if len(prevreq) >=20:
+        prevreq.pop()
+    prevreq.append((lat,lon))
     q.put("%s,%s"%(float(lat),float(lon)))
     updateQueueFile()
     return "lat/lon is: %s,%s"%(float(lat),float(lon))
@@ -584,5 +598,11 @@ def addToQueue(lat,lon):
 
 if __name__ == "__main__":
     register_background_thread(initial_registration=True)
+#    main()
+    t = threading.Thread(target=working)
+    t.daemon = True
+    t.start()
+
 
     app.run(debug=True)
+# vim: set expandtab sw=4 ts=4 : #
