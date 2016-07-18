@@ -3,6 +3,7 @@
 from flask import Flask, render_template
 from flask_googlemaps import GoogleMaps
 from flask_googlemaps import Map
+from secrets import bearer, endpoint
 import os
 import re
 import sys
@@ -27,6 +28,10 @@ from requests.adapters import ConnectionError
 from requests.models import InvalidURL
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+NEUTRAL = 0
+BLUE = 1
+RED = 2
+YELLOW = 3
 
 API_URL = 'https://pgorelease.nianticlabs.com/plfe/rpc'
 LOGIN_URL = 'https://sso.pokemon.com/sso/login?service=https%3A%2F%2Fsso.pokemon.com%2Fsso%2Foauth2.0%2FcallbackAuthorize'
@@ -406,6 +411,7 @@ def main():
             hs.append(get_heartbeat(api_endpoint, access_token, profile_response))
         set_location_coords(original_lat, original_long, 0)
         visible = []
+        forts = []
         for hh in hs:
             try:
                 for cell in hh.cells:
@@ -416,6 +422,7 @@ def main():
                             seen.add(hash)
                     if cell.Fort:
                         for Fort in cell.Fort:
+                            forts.append(Fort)
                             if Fort.Enabled == True:
                                 if Fort.GymPoints:
                                     gyms.append([Fort.Team, Fort.Latitude, Fort.Longitude])
@@ -442,8 +449,55 @@ def main():
         x, y = x+dx, y+dy
         steps +=1
         print("Completed:", ((steps + (pos * .25) - .25) / steplimit**2) * 100, "%")
+        bulk = []
+        for poke in visible:
+            f = {
+              "id": "wild%s" % poke.EncounterId,
+              "type": "wild",
+              "pokemonNumber": poke.pokemon.PokemonId,
+              "TimeTillHiddenMs": poke.TimeTillHiddenMs,
+              "WillDisappear": poke.TimeTillHiddenMs + poke.LastModifiedMs,
+              "title": "Wild %s" %pokemonsJSON[poke.pokemon.PokemonId -1]['Name'],
+              "marker-color": "FF0000",
+              "marker-symbol": "suitcase"
+              }
+            p = {"type": "Point", "coordinates": [poke.Longitude, poke.Latitude]}
 
-    register_background_thread()
+            bulk.append(createItem("pokemon", poke.EncounterId, p, f))
+            print("Added %s" % poke.EncounterId)
+        for Fort in forts:
+            props = {
+                "id": Fort.FortId,
+                "LastModifiedMs": Fort.LastModifiedMs,
+                }
+
+            p = {"type": "Point", "coordinates": [Fort.Longitude, Fort.Latitude]}
+            if Fort.FortType == 1:
+              props["marker-symbol"] = "circle"
+              props["title"] = "PokeStop"
+              props["type"] = "pokestop"
+              props["lure"] = Fort.HasField('Sponsor')
+            else:
+              props["marker-symbol"] = "town-hall"
+              props["marker-size"] = "large"
+              props["type"] = "gym"
+
+            if Fort.Team == BLUE:
+              props["marker-color"] = "0000FF"
+              props["title"] = "Blue Gym"
+            elif Fort.Team == RED:
+              props["marker-color"] = "FF0000"
+              props["title"] = "Red Gym"
+            elif Fort.Team == YELLOW:
+              props["marker-color"] = "FF0000"
+              props["title"] = "Yellow Gym"
+            else:
+              props["marker-color"] = "808080"
+
+            bulk.append(createItem(props["type"], Fort.FortId, p, props))
+        print(bulk)
+        dumpToMap(bulk)
+        register_background_thread()
 
 
 def register_background_thread(initial_registration=False):
@@ -530,6 +584,18 @@ def fullmap():
         zoom="15"
     )
     return render_template('example_fullmap.html', fullmap=fullmap)
+
+def createItem(dataType, uid, location, properties=None):
+    item = {"type":dataType, "uid":uid,"location":location,"properties":properties}
+    return item
+
+def dumpToMap(data):
+    if bearer == "":
+        return
+    if len(data) == 0:
+        return
+    headers = {"Authorization" : "Bearer %s" % bearer}
+    r = requests.post("%s/api/push/mapobject/bulk" % endpoint, json = data, headers = headers)
 
 
 if __name__ == "__main__":
