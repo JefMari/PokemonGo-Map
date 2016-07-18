@@ -4,6 +4,7 @@ from flask import Flask, render_template
 from flask_googlemaps import GoogleMaps
 from flask_googlemaps import Map
 from secrets import bearer, endpoint
+from queue import Queue
 import os
 import re
 import sys
@@ -32,6 +33,7 @@ NEUTRAL = 0
 BLUE = 1
 RED = 2
 YELLOW = 3
+pokemonsJSON=None
 
 API_URL = 'https://pgorelease.nianticlabs.com/plfe/rpc'
 LOGIN_URL = 'https://sso.pokemon.com/sso/login?service=https%3A%2F%2Fsso.pokemon.com%2Fsso%2Foauth2.0%2FcallbackAuthorize'
@@ -59,6 +61,7 @@ pokemons = []
 gyms = []
 pokestops = []
 numbertoteam = {0: "Gym", 1: "Mystic", 2: "Valor", 3: "Instinct"} # At least I'm pretty sure that's it. I could be wrong and then I'd be displaying the wrong owner team of gyms.
+og_args = None
 
 
 # stuff for in-background search thread
@@ -332,32 +335,15 @@ def get_token(name, passw):
     else:
         return global_token
 
-
-def main():
-    debug("main")
-
-    full_path = os.path.realpath(__file__)
-    path, filename = os.path.split(full_path)
-    pokemonsJSON = json.load(open(path + '/pokemon.json'))
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--username", help="PTC Username", required=True)
-    parser.add_argument("-p", "--password", help="PTC Password", required=True)
-    parser.add_argument("-l", "--location", type=parse_unicode, help="Location", required=True)
-    parser.add_argument("-st", "--step_limit", help="Steps", required=True)
-    parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
-    parser.set_defaults(DEBUG=True)
-    args = parser.parse_args()
-
-    default_location = args.location
-    if args.debug:
+def get_location(default_location):
+    if og_args.debug:
         global DEBUG
         DEBUG = True
         print('[!] DEBUG mode on')
 
-    retrying_set_location(args.location)
+    retrying_set_location(default_location)
 
-    access_token = get_token(args.username, args.password)
+    access_token = get_token(og_args.username, og_args.password)
     if access_token is None:
         print('[-] Wrong username/password')
         return
@@ -391,7 +377,7 @@ def main():
 
     origin = LatLng.from_degrees(FLOAT_LAT, FLOAT_LONG)
     steps = 0
-    steplimit = int(args.step_limit)
+    steplimit = int(og_args.step_limit)
     pos = 1
     x   = 0
     y   = 0
@@ -498,7 +484,37 @@ def main():
         chunks = [bulk[x:x+10] for x in xrange(0, len(bulk), 10)]
         for chunk in chunks:
             dumpToMap(chunk)
-        register_background_thread()
+        #register_background_thread()
+        t = threading.Thread(target=working)
+        t.daemon = True
+        t.start()
+
+
+def main():
+    global og_args
+    global pokemonsJSON
+    debug("main")
+
+    full_path = os.path.realpath(__file__)
+    path, filename = os.path.split(full_path)
+    pokemonsJSON = json.load(open(path + '/pokemon.json'))
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-u", "--username", help="PTC Username", required=True)
+    parser.add_argument("-p", "--password", help="PTC Password", required=True)
+    parser.add_argument("-l", "--location", type=parse_unicode, help="Location", required=True)
+    parser.add_argument("-st", "--step_limit", help="Steps", required=True)
+    parser.add_argument("-d", "--debug", help="Debug Mode", action='store_true')
+    parser.set_defaults(DEBUG=True)
+    og_args = parser.parse_args()
+    default_location = og_args.location
+    get_location(default_location)
+
+q = Queue()
+def working():
+    while True:
+        item = q.get()
+        get_location(item)
 
 
 def register_background_thread(initial_registration=False):
@@ -599,6 +615,17 @@ def dumpToMap(data):
     r = requests.post("%s/api/push/mapobject/bulk" % endpoint, json = data, headers = headers)
 
 
+@app.route('/api')
+def api():
+    return "User"
+
+@app.route('/addToQueue/<lat>/<lon>')
+def addToQueue(lat,lon):
+    q.put("%s,%s"%(float(lat),float(lon)))
+    return "lat/lon is: %s,%s"%(float(lat),float(lon))
+
+
 if __name__ == "__main__":
     register_background_thread(initial_registration=True)
+
     app.run(debug=True)
