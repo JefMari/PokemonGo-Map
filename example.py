@@ -3,7 +3,7 @@
 from flask import Flask, render_template
 from flask_googlemaps import GoogleMaps
 from flask_googlemaps import Map
-from secrets import bearer, endpoint
+from secrets import bearer, endpoint, qfile
 from queue import Queue
 import os
 import re
@@ -515,6 +515,7 @@ def working():
     while True:
         item = q.get()
         get_location(item)
+        updateQueueFile()
 
 
 def register_background_thread(initial_registration=False):
@@ -556,52 +557,6 @@ def create_app():
 
 app = create_app()
 
-
-@app.route('/')
-def fullmap():
-    pokeMarkers = []
-    for pokemon in pokemons:
-        currLat, currLon = pokemon[-2], pokemon[-1]
-        pokeMarkers.append(
-            {
-                'icon': 'static/icons/'+str(pokemon[0])+'.png',
-                'lat': currLat,
-                'lng': currLon,
-                'infobox': pokemon[1]
-            })
-    for gym in gyms:
-        pokeMarkers.append(
-            {
-                'icon': 'static/forts/'+numbertoteam[gym[0]]+'.png',
-                'lat': gym[1],
-                'lng': gym[2],
-                'infobox': "Gym owned by team " + numbertoteam[gym[0]]
-            })
-    for stop in pokestops:
-        pokeMarkers.append(
-            {
-                'icon': 'static/forts/Pstop.png',
-                'lat': stop[0],
-                'lng': stop[1],
-                'infobox': "Pokestop"
-            })
-    fullmap = Map(
-        identifier="fullmap",
-        style=(
-            "height:100%;"
-            "width:100%;"
-            "top:0;"
-            "left:0;"
-            "position:absolute;"
-            "z-index:200;"
-        ),
-        lat=deflat,
-        lng=deflng,
-        markers=pokeMarkers,
-        zoom="15"
-    )
-    return render_template('example_fullmap.html', fullmap=fullmap)
-
 def createItem(dataType, uid, location, properties=None):
     item = {"type":dataType, "uid":uid,"location":location,"properties":properties}
     return item
@@ -614,14 +569,16 @@ def dumpToMap(data):
     headers = {"Authorization" : "Bearer %s" % bearer}
     r = requests.post("%s/api/push/mapobject/bulk" % endpoint, json = data, headers = headers)
 
-
-@app.route('/api')
-def api():
-    return "User"
+def updateQueueFile():
+    size = q.qsize()
+    f = open(qfile, "w")
+    f.write("%s" % size)
+    f.close()
 
 @app.route('/addToQueue/<lat>/<lon>')
 def addToQueue(lat,lon):
     q.put("%s,%s"%(float(lat),float(lon)))
+    updateQueueFile()
     return "lat/lon is: %s,%s"%(float(lat),float(lon))
 
 
