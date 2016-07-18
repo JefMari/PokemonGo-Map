@@ -495,8 +495,9 @@ def main():
               props["marker-color"] = "808080"
 
             bulk.append(createItem(props["type"], Fort.FortId, p, props))
-        print(bulk)
-        dumpToMap(bulk)
+        chunks = [bulk[x:x+10] for x in xrange(0, len(bulk), 10)]
+        for chunk in chunks:
+            dumpToMap(chunk)
         register_background_thread()
 
 
