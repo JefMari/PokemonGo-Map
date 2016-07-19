@@ -587,6 +587,11 @@ def updateQueueFile():
     except:
         skipQueue = True
 
+@app.route("/")
+def retQueue():
+  size = q.qsize()
+  return "%s" % size
+
 @app.route('/addToQueue/<lat>/<lon>')
 def addToQueue(lat,lon):
     global prevreq
@@ -600,7 +605,7 @@ def addToQueue(lat,lon):
     prevreq.append((lat,lon))
     q.put("%s,%s"%(float(lat),float(lon)))
     updateQueueFile()
-    return "lat/lon is: %s,%s"%(float(lat),float(lon))
+    return "Queue is %s"% q.qsize()
 
 
 if __name__ == "__main__":
