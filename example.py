@@ -576,10 +576,10 @@ def dumpToMap(data):
 
 def updateQueueFile():
     global skipQueue
-    if skipQueue:
-        return
     size = q.qsize()
     print("updating queue with %s"% size)
+    if skipQueue:
+        return
     try:
         f = open(qfile, "w+")
         f.write("%s" % size)
