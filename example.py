@@ -604,5 +604,5 @@ if __name__ == "__main__":
     t.start()
 
 
-    app.run(debug=True)
+    app.run(host="0.0.0.0",debug=True)
 # vim: set expandtab sw=4 ts=4 : #
