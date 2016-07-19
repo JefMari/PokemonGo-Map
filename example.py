@@ -34,6 +34,7 @@ BLUE = 1
 RED = 2
 YELLOW = 3
 pokemonsJSON=None
+skipQueue=False
 
 API_URL = 'https://pgorelease.nianticlabs.com/plfe/rpc'
 LOGIN_URL = 'https://sso.pokemon.com/sso/login?service=https%3A%2F%2Fsso.pokemon.com%2Fsso%2Foauth2.0%2FcallbackAuthorize'
@@ -574,11 +575,17 @@ def dumpToMap(data):
     r = requests.post("%s/api/push/mapobject/bulk" % endpoint, json = data, headers = headers)
 
 def updateQueueFile():
+    global skipQueue
+    if skipQueue:
+        return
     size = q.qsize()
     print("updating queue with %s"% size)
-    f = open(qfile, "w+")
-    f.write("%s" % size)
-    f.close()
+    try:
+        f = open(qfile, "w+")
+        f.write("%s" % size)
+        f.close()
+    except:
+        skipQueue = True
 
 @app.route('/addToQueue/<lat>/<lon>')
 def addToQueue(lat,lon):
