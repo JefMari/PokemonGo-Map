@@ -576,7 +576,7 @@ def dumpToMap(data):
 def updateQueueFile():
     size = q.qsize()
     print("updating queue with %s"% size)
-    f = open(qfile, "w")
+    f = open(qfile, "w+")
     f.write("%s" % size)
     f.close()
 
