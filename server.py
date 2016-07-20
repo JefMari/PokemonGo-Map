@@ -432,7 +432,11 @@ def get_token(service, username, password):
 
     global global_token
     if global_token is None:
-        global_token = login_ptc(username, password)
+        if service == 'ptc':
+            global_token = login_ptc(username, password)
+        else:
+            #global_token = login_google(username, password)
+            sys.exit()
         return global_token
     else:
         return global_token
@@ -555,9 +559,9 @@ def main():
 
     args = get_args()
 
-    #if args.auth_service not in ['ptc', 'google']:
-        #print '[!] Invalid Auth service specified'
-        #return
+    if args.auth_service not in ['ptc', 'google']:
+        print '[!] Invalid Auth service specified'
+        return
 
     print('[+] Locale is ' + args.locale)
 
@@ -1026,4 +1030,4 @@ if __name__ == '__main__':
     t = threading.Thread(target=working)
     t.daemon = True
     t.start()
-    app.run(debug=True, threaded=True, host=0.0.0.0)
+    app.run(debug=True, threaded=True, host=args.host, port=args.port)
