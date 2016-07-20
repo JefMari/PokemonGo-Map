@@ -6,7 +6,7 @@ from flask import Flask, render_template
 from flask_googlemaps import GoogleMaps
 from flask_googlemaps import Map
 from flask_googlemaps import icons
-from secrets import bearer, endpoint, qfile, GOOGLEMAPS_KEY
+#from secrets import bearer, endpoint, qfile, GOOGLEMAPS_KEY
 import os
 import re
 import sys
@@ -25,7 +25,7 @@ from google.protobuf.message import DecodeError
 from s2sphere import *
 from datetime import datetime
 from geopy.geocoders import GoogleV3
-#from gpsoauth import perform_master_login, perform_oauth
+from gpsoauth import perform_master_login, perform_oauth
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from requests.adapters import ConnectionError
@@ -321,16 +321,16 @@ def get_profile(service, access_token, api, useauth, *reqq):
         req5.MergeFrom(reqq[4])
     return retrying_api_req(service, api, access_token, req, useauth=useauth)
 
-#def login_google(username, password):
-#    print '[!] Google login for: {}'.format(username)
-#    r1 = perform_master_login(username, password, ANDROID_ID)
-#    r2 = perform_oauth(username,
-#                       r1.get('Token', ''),
-#                       ANDROID_ID,
-#                       SERVICE,
-#                       APP,
-#                       CLIENT_SIG, )
-#    return r2.get('Auth')
+def login_google(username, password):
+    print '[!] Google login for: {}'.format(username)
+    r1 = perform_master_login(username, password, ANDROID_ID)
+    r2 = perform_oauth(username,
+                       r1.get('Token', ''),
+                       ANDROID_ID,
+                       SERVICE,
+                       APP,
+                       CLIENT_SIG, )
+    return r2.get('Auth')
 
 def login_ptc(username, password):
     print '[!] PTC login for: {}'.format(username)
@@ -432,7 +432,11 @@ def get_token(service, username, password):
 
     global global_token
     if global_token is None:
-        global_token = login_ptc(username, password)
+        if service == 'ptc':
+            global_token = login_ptc(username, password)
+        else:
+            #global_token = login_google(username, password)
+            sys.exit()
         return global_token
     else:
         return global_token
@@ -555,9 +559,9 @@ def main():
 
     args = get_args()
 
-    #if args.auth_service not in ['ptc', 'google']:
-        #print '[!] Invalid Auth service specified'
-        #return
+    if args.auth_service not in ['ptc', 'google']:
+        print '[!] Invalid Auth service specified'
+        return
 
     print('[+] Locale is ' + args.locale)
 
@@ -719,57 +723,6 @@ transform_from_wgs_to_gcj(Location(Fort.Latitude, Fort.Longitude))
             "id": poke.pokemon.PokemonId,
             "name": pokename
         }
-    bulk = []
-    for poke in visible:
-        pokeid = str(poke.pokemon.PokemonId)
-        pokename = pokemonsJSON[pokeid]
-        f = {
-          "id": "wild%s" % poke.EncounterId,
-          "type": "wild",
-          "pokemonNumber": poke.pokemon.PokemonId,
-          "TimeTillHiddenMs": poke.TimeTillHiddenMs,
-          "WillDisappear": poke.TimeTillHiddenMs + poke.LastModifiedMs,
-          "title": "Wild %s" %pokename,
-          "marker-color": "FF0000",
-          "marker-symbol": "suitcase"
-          }
-        p = {"type": "Point", "coordinates": [poke.Longitude, poke.Latitude]}
-
-        bulk.append(createItem("pokemon", poke.EncounterId, p, f))
-        print("Added %s" % poke.EncounterId)
-    for Fort in forts:
-        props = {
-            "id": Fort.FortId,
-            "LastModifiedMs": Fort.LastModifiedMs,
-            }
-
-        p = {"type": "Point", "coordinates": [Fort.Longitude, Fort.Latitude]}
-        if Fort.FortType == 1:
-          props["marker-symbol"] = "circle"
-          props["title"] = "PokeStop"
-          props["type"] = "pokestop"
-          props["lure"] = Fort.HasField('Sponsor')
-        else:
-          props["marker-symbol"] = "town-hall"
-          props["marker-size"] = "large"
-          props["type"] = "gym"
-
-        if Fort.Team == BLUE:
-          props["marker-color"] = "0000FF"
-          props["title"] = "Blue Gym"
-        elif Fort.Team == RED:
-          props["marker-color"] = "FF0000"
-          props["title"] = "Red Gym"
-        elif Fort.Team == YELLOW:
-          props["marker-color"] = "FF0000"
-          props["title"] = "Yellow Gym"
-        else:
-          props["marker-color"] = "808080"
-
-        bulk.append(createItem(props["type"], Fort.FortId, p, props))
-    chunks = [bulk[x:x+10] for x in xrange(0, len(bulk), 10)]
-    for chunk in chunks:
-        dumpToMap(chunk)
 
 def clear_stale_pokemons():
     current_time = time.time()
@@ -825,146 +778,146 @@ def create_app():
 app = create_app()
 
 
-#@app.route('/data')
-#def data():
-#    """ Gets all the PokeMarkers via REST """
-#    return json.dumps(get_pokemarkers())
-#
-#@app.route('/raw_data')
-#def raw_data():
-#    """ Gets raw data for pokemons/gyms/pokestops via REST """
-#    return flask.jsonify(pokemons=pokemons, gyms=gyms, pokestops=pokestops)
-#
-#
-#@app.route('/config')
-#def config():
-#    """ Gets the settings for the Google Maps via REST"""
-#    center = {
-#        'lat': FLOAT_LAT,
-#        'lng': FLOAT_LONG,
-#        'zoom': 15,
-#        'identifier': "fullmap"
-#    }
-#    return json.dumps(center)
-#
-#
-#@app.route('/')
-#def fullmap():
-#    clear_stale_pokemons()
-#
-#    return render_template(
-#        'example_fullmap.html', key=GOOGLEMAPS_KEY, fullmap=get_map(), auto_refresh=auto_refresh)
-#
-#
-#@app.route('/next_loc')
-#def next_loc():
-#    global NEXT_LAT, NEXT_LONG
-#
-#    lat = flask.request.args.get('lat', '')
-#    lon = flask.request.args.get('lon', '')
-#    if not (lat and lon):
-#        print('[-] Invalid next location: %s,%s' % (lat, lon))
-#    else:
-#        print('[+] Saved next location as %s,%s' % (lat, lon))
-#        NEXT_LAT = float(lat)
-#        NEXT_LONG = float(lon)
-#        return 'ok'
-#
-#
-#def get_pokemarkers():
-#    pokeMarkers = [{
-#        'icon': icons.dots.red,
-#        'lat': origin_lat,
-#        'lng': origin_lon,
-#        'infobox': "Start position",
-#        'type': 'custom',
-#        'key': 'start-position',
-#        'disappear_time': -1
-#    }]
-#
-#    for pokemon_key in pokemons:
-#        pokemon = pokemons[pokemon_key]
-#        datestr = datetime.fromtimestamp(pokemon[
-#            'disappear_time'])
-#        dateoutput = datestr.strftime("%H:%M:%S")
-#        if is_ampm_clock:
-#        	dateoutput = datestr.strftime("%I:%M%p").lstrip('0')
-#        pokemon['disappear_time_formatted'] = dateoutput
-#
-#        LABEL_TMPL = u'''
-#<div><b>{name}</b><span> - </span><small><a href='http://www.pokemon.com/us/pokedex/{id}' target='_blank' title='View in Pokedex'>#{id}</a></small></div>
-#<div>Disappears at - {disappear_time_formatted} <span class='label-countdown' disappears-at='{disappear_time}'></span></div>
-#<div><a href='https://www.google.com/maps/dir/Current+Location/{lat},{lng}' target='_blank' title='View in Maps'>Get Directions</a></div>
-#'''
-#        label = LABEL_TMPL.format(**pokemon)
-#        #  NOTE: `infobox` field doesn't render multiple line string in frontend
-#        label = label.replace('\n', '')
-#
-#        pokeMarkers.append({
-#            'type': 'pokemon',
-#            'key': pokemon_key,
-#            'disappear_time': pokemon['disappear_time'],
-#            'icon': 'static/icons/%d.png' % pokemon["id"],
-#            'lat': pokemon["lat"],
-#            'lng': pokemon["lng"],
-#            'infobox': label
-#        })
-#
-#    for gym_key in gyms:
-#        gym = gyms[gym_key]
-#        if gym[0] == 0:
-#            color = "rgba(0,0,0,.4)"
-#        if gym[0] == 1:
-#            color = "rgba(74, 138, 202, .6)"
-#        if gym[0] == 2:
-#            color = "rgba(240, 68, 58, .6)"
-#        if gym[0] == 3:
-#            color = "rgba(254, 217, 40, .6)"
-#
-#        icon = 'static/forts/'+numbertoteam[gym[0]]+'_large.png'
-#        pokeMarkers.append({
-#            'icon': 'static/forts/' + numbertoteam[gym[0]] + '.png',
-#            'type': 'gym',
-#            'key': gym_key,
-#            'disappear_time': -1,
-#            'lat': gym[1],
-#            'lng': gym[2],
-#            'infobox': "<div><center><small>Gym owned by:</small><br><b style='color:" + color + "'>Team " + numbertoteam[gym[0]] + "</b><br><img id='" + numbertoteam[gym[0]] + "' height='100px' src='"+icon+"'><br>Prestige: " + str(gym[3]) + "</center>"
-#        })
-#    for stop_key in pokestops:
-#        stop = pokestops[stop_key]
-#        if stop[2] > 0:
-#            pokeMarkers.append({
-#                'type': 'lured_stop',
-#                'key': stop_key,
-#                'disappear_time': -1,
-#                'icon': 'static/forts/PstopLured.png',
-#                'lat': stop[0],
-#                'lng': stop[1],
-#                'infobox': 'Lured Pokestop, expires at ' + stop[2],
-#            })
-#        else:
-#            pokeMarkers.append({
-#                'type': 'stop',
-#                'key': stop_key,
-#                'disappear_time': -1,
-#                'icon': 'static/forts/Pstop.png',
-#                'lat': stop[0],
-#                'lng': stop[1],
-#                'infobox': 'Pokestop',
-#            })
-#    return pokeMarkers
-#
-#
-#def get_map():
-#    fullmap = Map(
-#        identifier="fullmap2",
-#        style='height:100%;width:100%;top:0;left:0;position:absolute;z-index:200;',
-#        lat=origin_lat,
-#        lng=origin_lon,
-#        markers=get_pokemarkers(),
-#        zoom='15', )
-#    return fullmap
+@app.route('/data')
+def data():
+    """ Gets all the PokeMarkers via REST """
+    return json.dumps(get_pokemarkers())
+
+@app.route('/raw_data')
+def raw_data():
+    """ Gets raw data for pokemons/gyms/pokestops via REST """
+    return flask.jsonify(pokemons=pokemons, gyms=gyms, pokestops=pokestops)
+
+
+@app.route('/config')
+def config():
+    """ Gets the settings for the Google Maps via REST"""
+    center = {
+        'lat': FLOAT_LAT,
+        'lng': FLOAT_LONG,
+        'zoom': 15,
+        'identifier': "fullmap"
+    }
+    return json.dumps(center)
+
+
+@app.route('/')
+def fullmap():
+    clear_stale_pokemons()
+
+    return render_template(
+        'example_fullmap.html', key=GOOGLEMAPS_KEY, fullmap=get_map(), auto_refresh=auto_refresh)
+
+
+@app.route('/next_loc')
+def next_loc():
+    global NEXT_LAT, NEXT_LONG
+
+    lat = flask.request.args.get('lat', '')
+    lon = flask.request.args.get('lon', '')
+    if not (lat and lon):
+        print('[-] Invalid next location: %s,%s' % (lat, lon))
+    else:
+        print('[+] Saved next location as %s,%s' % (lat, lon))
+        NEXT_LAT = float(lat)
+        NEXT_LONG = float(lon)
+        return 'ok'
+
+
+def get_pokemarkers():
+    pokeMarkers = [{
+        'icon': icons.dots.red,
+        'lat': origin_lat,
+        'lng': origin_lon,
+        'infobox': "Start position",
+        'type': 'custom',
+        'key': 'start-position',
+        'disappear_time': -1
+    }]
+
+    for pokemon_key in pokemons:
+        pokemon = pokemons[pokemon_key]
+        datestr = datetime.fromtimestamp(pokemon[
+            'disappear_time'])
+        dateoutput = datestr.strftime("%H:%M:%S")
+        if is_ampm_clock:
+        	dateoutput = datestr.strftime("%I:%M%p").lstrip('0')
+        pokemon['disappear_time_formatted'] = dateoutput
+
+        LABEL_TMPL = u'''
+<div><b>{name}</b><span> - </span><small><a href='http://www.pokemon.com/us/pokedex/{id}' target='_blank' title='View in Pokedex'>#{id}</a></small></div>
+<div>Disappears at - {disappear_time_formatted} <span class='label-countdown' disappears-at='{disappear_time}'></span></div>
+<div><a href='https://www.google.com/maps/dir/Current+Location/{lat},{lng}' target='_blank' title='View in Maps'>Get Directions</a></div>
+'''
+        label = LABEL_TMPL.format(**pokemon)
+        #  NOTE: `infobox` field doesn't render multiple line string in frontend
+        label = label.replace('\n', '')
+
+        pokeMarkers.append({
+            'type': 'pokemon',
+            'key': pokemon_key,
+            'disappear_time': pokemon['disappear_time'],
+            'icon': 'static/icons/%d.png' % pokemon["id"],
+            'lat': pokemon["lat"],
+            'lng': pokemon["lng"],
+            'infobox': label
+        })
+
+    for gym_key in gyms:
+        gym = gyms[gym_key]
+        if gym[0] == 0:
+            color = "rgba(0,0,0,.4)"
+        if gym[0] == 1:
+            color = "rgba(74, 138, 202, .6)"
+        if gym[0] == 2:
+            color = "rgba(240, 68, 58, .6)"
+        if gym[0] == 3:
+            color = "rgba(254, 217, 40, .6)"
+
+        icon = 'static/forts/'+numbertoteam[gym[0]]+'_large.png'
+        pokeMarkers.append({
+            'icon': 'static/forts/' + numbertoteam[gym[0]] + '.png',
+            'type': 'gym',
+            'key': gym_key,
+            'disappear_time': -1,
+            'lat': gym[1],
+            'lng': gym[2],
+            'infobox': "<div><center><small>Gym owned by:</small><br><b style='color:" + color + "'>Team " + numbertoteam[gym[0]] + "</b><br><img id='" + numbertoteam[gym[0]] + "' height='100px' src='"+icon+"'><br>Prestige: " + str(gym[3]) + "</center>"
+        })
+    for stop_key in pokestops:
+        stop = pokestops[stop_key]
+        if stop[2] > 0:
+            pokeMarkers.append({
+                'type': 'lured_stop',
+                'key': stop_key,
+                'disappear_time': -1,
+                'icon': 'static/forts/PstopLured.png',
+                'lat': stop[0],
+                'lng': stop[1],
+                'infobox': 'Lured Pokestop, expires at ' + stop[2],
+            })
+        else:
+            pokeMarkers.append({
+                'type': 'stop',
+                'key': stop_key,
+                'disappear_time': -1,
+                'icon': 'static/forts/Pstop.png',
+                'lat': stop[0],
+                'lng': stop[1],
+                'infobox': 'Pokestop',
+            })
+    return pokeMarkers
+
+
+def get_map():
+    fullmap = Map(
+        identifier="fullmap2",
+        style='height:100%;width:100%;top:0;left:0;position:absolute;z-index:200;',
+        lat=origin_lat,
+        lng=origin_lon,
+        markers=get_pokemarkers(),
+        zoom='15', )
+    return fullmap
 
 q = Queue()
 def working():
@@ -974,33 +927,13 @@ def working():
         get_location(item)
         updateQueueFile()
 
-def createItem(dataType, uid, location, properties=None):
-    item = {"type":dataType, "uid":uid,"location":location,"properties":properties}
-    return item
-
-def dumpToMap(data):
-    if bearer == "":
-        return
-    if len(data) == 0:
-        return
-    headers = {"Authorization" : "Bearer %s" % bearer}
-    r = requests.post("%s/api/push/mapobject/bulk" % endpoint, json = data, headers = headers)
-skipQueue=False
 def updateQueueFile():
     global skipQueue
     size = q.qsize()
     print("updating queue with %s"% size)
-    if skipQueue:
-        return
-    try:
-        f = open(qfile, "w+")
-        f.write("%s" % size)
-        f.close()
-    except:
-        skipQueue = True
 
 
-@app.route("/")
+@app.route("/queue")
 def retQueue():
   size = q.qsize()
   return "%s" % size
@@ -1026,4 +959,4 @@ if __name__ == '__main__':
     t = threading.Thread(target=working)
     t.daemon = True
     t.start()
-    app.run(debug=True, threaded=True, host="0.0.0.0")
+    app.run(debug=True, threaded=True, host=args.host, port=args.port)
